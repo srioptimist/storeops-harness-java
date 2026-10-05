@@ -1,8 +1,10 @@
 package com.storeops.activities.routes;
 
+import com.storeops.activities.model.ActivityAuditEntry;
 import com.storeops.activities.model.Task;
 import com.storeops.activities.model.TaskStatus;
 import com.storeops.activities.service.ActivityService;
+import com.storeops.activities.service.BulkStatusResult;
 import com.storeops.staff.api.AuthenticatedUser;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -48,6 +50,16 @@ public class ActivityController {
     @GetMapping(BASE + "/{id}")
     public Task get(@PathVariable("id") String id) {
         return service.get(id);
+    }
+
+    @GetMapping(BASE + "/{id}/audit")
+    public List<ActivityAuditEntry> audit(AuthenticatedUser caller, @PathVariable("id") String id) {
+        return service.auditTrail(caller, id);
+    }
+
+    @PatchMapping(BASE + "/bulk-status")
+    public BulkStatusResult bulkStatus(AuthenticatedUser caller, @Valid @RequestBody BulkStatusRequest request) {
+        return service.bulkUpdateStatus(caller, request.toCommand());
     }
 
     @PatchMapping(BASE + "/{id}")

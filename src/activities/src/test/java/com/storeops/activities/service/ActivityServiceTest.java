@@ -12,6 +12,7 @@ import com.storeops.activities.model.Task;
 import com.storeops.activities.model.TaskCategory;
 import com.storeops.activities.model.TaskPriority;
 import com.storeops.activities.model.TaskStatus;
+import com.storeops.activities.repository.InMemoryActivityAuditRepository;
 import com.storeops.activities.repository.InMemoryTaskRepository;
 import com.storeops.programmes.api.ProgrammeDirectory;
 import com.storeops.shared.error.ForbiddenError;
@@ -51,7 +52,8 @@ class ActivityServiceTest {
         eventBus = mock(EventBus.class);
         when(staffDirectory.exists("assoc")).thenReturn(true);
         when(programmeDirectory.exists("prog-1")).thenReturn(true);
-        service = new ActivityService(new InMemoryTaskRepository(), staffDirectory, programmeDirectory, eventBus);
+        service = new ActivityService(new InMemoryTaskRepository(), new InMemoryActivityAuditRepository(),
+                staffDirectory, programmeDirectory, eventBus);
     }
 
     @Test
