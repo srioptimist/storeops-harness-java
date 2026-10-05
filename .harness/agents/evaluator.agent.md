@@ -94,7 +94,7 @@ must cite evidence, either a `file:line` or a log line. Review in this order, hi
 ```
 if any hard gate failed or NOT_RUN                    -> FAIL
 elif any checklist item with blocking=true failed     -> FAIL
-else score = Σ(dimension weight × passed checks in dimension / checks in dimension)
+else score = floor(Σ dimension weight × passed / applicable)   (N/A rules and full formula: grading-criteria GC-3)
      score >= 85                                       -> PASS
      70 <= score < 85                                  -> CONDITIONAL_PASS   (failed non-blocking checks become conditions)
      score < 70                                        -> FAIL
