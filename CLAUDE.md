@@ -117,8 +117,9 @@ HARNESS INCOMPLETE — missing: <paths>. No run started.
       close.
    3. Commit on the harness branch: `harness(<run-id>): sprint-<N> <contract title>`. The commit
       includes the `src/` changes and the archive files.
-7. **Complete.** After the last sprint, set state `COMPLETE`. Print a summary: sprints, verdicts,
-   iterations used, carried-over conditions, and the branch name. **Do not push or merge.** Opening
+7. **Complete.** After the last sprint, set state `COMPLETE`. Spawn the Monitor with
+   `final: true`; it writes `.harness/reviews/<run-id>/run-summary.md`. Commit that file. Print a
+   summary: sprints, verdicts, iterations used, carried-over conditions, and the branch name. **Do not push or merge.** Opening
    the PR is the developer's decision.
 
 ---
@@ -150,8 +151,8 @@ wrote, and the reason is appended to the feedback file under `## Orchestrator ov
 | ID | Check | Why |
 |---|---|---|
 | O1 | `sprint-<N>-checks.log` is missing, or its recorded exit code ≠ 0, or it disagrees with `gate_command_exit_code` | An LLM must not "pass" a red build. |
-| O2 | `git diff --name-only <base-sha>` touches a **protected path**: `CLAUDE.md`, `.harness/agents/**`, `.harness/skills/**`, `config/**`, root `pom.xml`, `src/app/src/test/java/com/storeops/architecture/**` | The Generator must not weaken the gates it is judged by. |
-| O3 | Added lines in the diff contain `@SuppressWarnings`, `@SuppressFBWarnings`, `CHECKSTYLE:OFF`, `@Disabled`, or `<skip>true</skip>` | Same as O2: silencing a check is not fixing it. |
+| O2 | `git diff --name-only <base-sha>` plus untracked files (`git ls-files --others --exclude-standard`) touches a **protected path**: `CLAUDE.md`, `.harness/agents/**`, `.harness/skills/**`, `config/**`, root `pom.xml`, `src/app/src/test/java/com/storeops/architecture/**` | The Generator must not weaken the gates it is judged by. |
+| O3 | Added lines in the sprint diff (`git diff HEAD` plus untracked files) contain `@SuppressWarnings`, `@SuppressFBWarnings`, `CHECKSTYLE:OFF`, `@Disabled`, or `<skip>true</skip>` | Same as O2: silencing a check is not fixing it. |
 | O4 | The front matter is missing or unparseable, or `verdict` is not one of the three values | Ambiguous output falls back to the safe verdict. |
 | O5 | `verdict` is PASS or CONDITIONAL_PASS but `hard_gates_failed` is non-empty | Internal contradiction falls back to the safe verdict. |
 
@@ -165,7 +166,7 @@ verdict is FAIL with reason `EVALUATOR_OUTPUT_AMBIGUOUS`.
 |---|---|---|
 | `PASS` | — | Close the sprint (§4.6) and advance to sprint N+1. |
 | `CONDITIONAL_PASS` | All hard gates passed, only non-blocking findings | Close the sprint. Copy its listed conditions into `run-state.md → carried_conditions`. The Planner-authored contract for N+1 is **not** edited. Conditions appear in the completion summary for the developer. |
-| `FAIL` | `i < 3` | Increment `i`. Re-spawn the Generator with the contract plus this feedback file only. |
+| `FAIL` | `i < 3` | Copy the feedback to `sprint-<N>-iter-<i>-evaluator-feedback.md` (kept for the Monitor). Increment `i`. Re-spawn the Generator with the contract plus the latest feedback file only. |
 | `FAIL` | `i = 3` | **Escalate** (§7). Stop the loop. |
 
 ---
@@ -304,10 +305,11 @@ PROMPT.md                         feature prompt used for the demonstration run
 .harness/output/                  working files for the active run (gitignored):
                                   run-state.md, spec.md, sprint-N-contract.md,
                                   sprint-N-generator-summary.md, sprint-N-evaluator-feedback.md,
-                                  sprint-N-checks.log, escalation.md
+                                  sprint-N-iter-i-evaluator-feedback.md, sprint-N-checks.log,
+                                  escalation.md
 .harness/reviews/<run-id>/        committed audit trail: spec.md, sprint-N-contract.md,
                                   sprint-N-generator-summary.md, sprint-N-evaluator-feedback.md,
-                                  sprint-N-run-log.md
+                                  sprint-N-run-log.md, run-summary.md
 src/<module>/                     StoreOps source; tests in each module's src/test/java
 ```
 
