@@ -127,6 +127,15 @@ public class ActivityService implements ActivityDirectory {
                 count(results, BulkItemOutcome.UNCHANGED), count(results, BulkItemOutcome.FAILED), results);
     }
 
+    /**
+     * Lists the audit entries of one own-store activity, oldest first. An unknown or other-store
+     * activity gives {@link NotFoundError}.
+     */
+    public List<ActivityAuditEntry> auditTrail(AuthenticatedUser caller, String id) {
+        Task task = findInCallerStore(caller, id);
+        return auditRepository.findByActivityId(task.id());
+    }
+
     @Override
     public List<Task> findByStore(String storeId) {
         return repository.findByStore(storeId);
