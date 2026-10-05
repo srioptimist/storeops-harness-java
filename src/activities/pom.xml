@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.storeops</groupId>
+        <artifactId>storeops-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>storeops-activities</artifactId>
+    <name>StoreOps :: Activities</name>
+    <description>Operational activities: restocking runs, planogram resets, compliance checks, store tasks.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.storeops</groupId>
+            <artifactId>storeops-shared</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.storeops</groupId>
+            <artifactId>storeops-staff</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.storeops</groupId>
+            <artifactId>storeops-programmes</artifactId>
+        </dependency>
+    </dependencies>
+</project>

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.storeops</groupId>
+        <artifactId>storeops-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>storeops-app</artifactId>
+    <name>StoreOps :: App</name>
+    <description>Spring Boot entry point assembling all modules; hosts end-to-end and architecture tests.</description>
+
+    <properties>
+        <!-- Only wiring lives here; coverage is enforced per domain module. -->
+        <jacoco.check.skip>true</jacoco.check.skip>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.storeops</groupId>
+            <artifactId>storeops-shared</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.storeops</groupId>
+            <artifactId>storeops-staff</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.storeops</groupId>
+            <artifactId>storeops-programmes</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.storeops</groupId>
+            <artifactId>storeops-activities</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.storeops</groupId>
+            <artifactId>storeops-alerts</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.storeops</groupId>
+            <artifactId>storeops-reports</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>storeops</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <skip>false</skip>
+                    <mainClass>com.storeops.StoreOpsApplication</mainClass>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

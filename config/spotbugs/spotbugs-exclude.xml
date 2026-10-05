@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpotBugs exclusions for StoreOps. Keep this list short and justified.
+-->
+<FindBugsFilter>
+    <!--
+      Spring beans receive their collaborators via constructor injection; SpotBugs reports these
+      as "may expose internal representation" even though the injected objects are singletons
+      owned by the container, not mutable state of the bean.
+    -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+        <Package name="~com\.storeops\..*\.(routes|service|events|config)"/>
+    </Match>
+</FindBugsFilter>
