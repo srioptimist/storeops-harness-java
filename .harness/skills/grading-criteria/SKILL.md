@@ -70,6 +70,15 @@ dimension's denominator. A dimension whose checks are all N/A scores its full we
 
 ## GC-3 Scoring
 
+The formula below is implemented in `.harness/tools/HarnessGates.java` (`computeVerdict`). The
+Evaluator never calculates it by hand. `HarnessGates.java selftest` does three things:
+- It parses the GC-1 and GC-2 tables of **this file** and fails if the weights, check ids,
+  dimensions, blocking flags or N/A permissions differ from the tool's registry.
+- It re-runs the GC-4 worked examples.
+- It recomputes the same inputs 200 times to prove the output is byte-identical.
+
+**Change this file and the tool together.**
+
 ```
 dimension_score(D) = weight(D) × passed(D) / applicable(D)        (full weight if applicable(D) = 0)
 score              = floor( Σ dimension_score )                    (never round up)
@@ -114,4 +123,13 @@ is blocking, so the verdict is **FAIL**, even though the score (D3 = 25 × 3/5 =
 - **Over budget means a fail.** If the diff exceeds the review budget (`how-to-review` HR-7),
   every check not yet reviewed fails with evidence `REVIEW_BUDGET_EXCEEDED`.
 - **No partial credit**, no "mostly passes", no verdicts outside PASS / CONDITIONAL_PASS / FAIL.
-  An unparseable feedback header is turned into FAIL by the orchestrator (`CLAUDE.md` §5.2 O4).
+- **The tool enforces the fallback per row.** In the checklist table, each of these counts as FAIL:
+  - a missing row (`NO_EVIDENCE`);
+  - `PASS` with an empty evidence cell;
+  - `N/A` on a check whose *N/A when* is "never";
+  - an unrecognised result;
+  - conflicting duplicate rows.
+- **Whole-checklist ambiguity.** If the checklist has no recognisable rows at all, routing returns
+  `REEVALUATE` once, then FAIL `EVALUATOR_OUTPUT_AMBIGUOUS` (`CLAUDE.md` §5.2).
+- **The header is advisory.** A feedback header that disagrees with the computed verdict is
+  overridden, and the mismatch is recorded as evaluator drift.

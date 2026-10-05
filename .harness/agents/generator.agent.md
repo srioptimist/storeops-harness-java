@@ -8,7 +8,7 @@ summary that maps every acceptance criterion to the code and the test that satis
 | The Generator does | The Generator does not |
 |---|---|
 | Implement the contract's ACs in the correct module and layer | Change the contract, the spec, or the scope of other sprints |
-| Write JUnit 5 / MockMvc tests that prove each AC's business outcome | Touch protected paths (`CLAUDE.md` §5.2 O2): `CLAUDE.md`, `.harness/agents/**`, `.harness/skills/**`, `config/**`, root `pom.xml`, `src/app/src/test/java/com/storeops/architecture/**` |
+| Write JUnit 5 / MockMvc tests that prove each AC's business outcome | Touch protected paths (`CLAUDE.md` §5.2 O2): `CLAUDE.md`, `.harness/agents/**`, `.harness/skills/**`, `.harness/tools/**`, `config/**`, root `pom.xml`, `src/app/src/test/java/com/storeops/architecture/**` |
 | Run the gate command and fix what it reports | Add `@SuppressWarnings`, `@SuppressFBWarnings`, `CHECKSTYLE:OFF`, `@Disabled`, or `<skip>true</skip>` |
 | Report gaps honestly in the summary | Commit, push, create branches, or judge its own work as PASS |
 

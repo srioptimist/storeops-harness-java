@@ -21,6 +21,7 @@ loaded into every session (see §6.4, cost awareness).
 | Stack | Java 17, Spring Boot 3.5, Maven multi-module (`src/<module>/`), in-memory storage |
 | Modules | `shared`, `staff`, `programmes`, `activities`, `alerts`, `reports`, `app` |
 | Gate command | `./mvnw -B test` (Windows: `.\mvnw.cmd -B test`) — compile with `-Werror`, Checkstyle, SpotBugs, JUnit 5 + MockMvc, ArchUnit rules, JaCoCo thresholds. **Exit code 0 = all automated gates green.** |
+| Gate tool | `java .harness/tools/HarnessGates.java gates\|verdict\|route\|selftest` — computes hard gates, score, verdict and next action deterministically (§5) |
 | Run app | `./mvnw -B install -DskipTests` then `./mvnw -pl src/app spring-boot:run` → `http://localhost:8080` |
 | Smoke check | `GET /api/tasks` → 200 |
 
@@ -63,11 +64,15 @@ Agents are defined in `.harness/agents/`. Skills are feed-forward guides in
 |---|---|---|---|---|
 | `planner.agent.md` | Decomposes the feature into a spec and sprint contracts with GIVEN/WHEN/THEN acceptance criteria | `app-context`, `architecture-principles`, `sprint-decomposition` | Feature prompt, `REVISE` notes | `spec.md` (ends with `STATUS: AWAITING APPROVAL`), `sprint-<N>-contract.md` |
 | `generator.agent.md` | Implements exactly one sprint contract: code + tests in `src/` | `app-context`, `architecture-principles`, `coding-conventions`, `how-to-test` | `sprint-<N>-contract.md`, latest `sprint-<N>-evaluator-feedback.md` (retries only) | Code in `src/**`, `sprint-<N>-generator-summary.md` (AC self-check table, files changed, known gaps) |
-| `evaluator.agent.md` | Runs the automated gates, reviews the diff against the contract, issues a structured verdict | `architecture-principles`, `how-to-review`, `grading-criteria` | Contract, generator summary, `git diff`, check output | `sprint-<N>-evaluator-feedback.md`, `sprint-<N>-checks.log` |
+| `evaluator.agent.md` | Runs the automated gates, reviews the diff against the contract, issues a structured verdict | `architecture-principles`, `how-to-review`, `grading-criteria` | Contract, generator summary, `git diff`, gate tool output | `sprint-<N>-evaluator-feedback.md`; via the gate tool: `sprint-<N>-checks.log`, `sprint-<N>-gates.md`, `sprint-<N>-verdict.md` |
 | `monitor.agent.md` | Records the sprint outcome for observability and skill-file tuning | `app-context` | Final feedback + summary for the sprint, `run-state.md` | `.harness/reviews/<run-id>/sprint-<N>-run-log.md` |
 
-**Pre-flight check (deterministic).** Before doing anything for `@planner`, confirm that all four
-agent files and all seven skill files above exist. If any is missing, stop and print:
+**Pre-flight check (deterministic).** Before doing anything for `@planner`, confirm two things:
+- All four agent files, all seven skill files and `.harness/tools/HarnessGates.java` exist.
+- `java .harness/tools/HarnessGates.java selftest` prints `SELFTEST PASSED`. This proves the tool's
+  checklist and weights still match `grading-criteria`.
+
+If either fails, stop and print:
 
 ```
 HARNESS INCOMPLETE — missing: <paths>. No run started.
@@ -107,12 +112,15 @@ HARNESS INCOMPLETE — missing: <paths>. No run started.
    From here the loop runs **autonomously** with no developer prompts until `COMPLETE` or `ESCALATED`.
 5. **Sprint loop.** For each sprint N in contract order, with iteration `i` starting at 1:
    1. *Generate.* Spawn the Generator with the contract (plus the latest feedback if `i > 1`).
-   2. *Evaluate.* Spawn the Evaluator. It must run the gate command itself and save raw output.
-   3. *Route.* Apply §5 to the verdict.
+   2. *Evaluate.* Spawn the Evaluator. It runs `HarnessGates.java gates` (the real build plus the git
+      checks), reviews the diff, writes the checklist, and runs `HarnessGates.java verdict`.
+   3. *Route.* Run `java .harness/tools/HarnessGates.java route --sprint <N> --iteration <i>` and act
+      on its `NEXT_ACTION` line (§5).
 6. **Close a sprint** (after PASS or CONDITIONAL PASS):
    1. Spawn the Monitor for sprint N.
    2. Archive to `.harness/reviews/<run-id>/`: `sprint-<N>-contract.md`,
-      `sprint-<N>-generator-summary.md`, `sprint-<N>-evaluator-feedback.md` (final iteration), and
+      `sprint-<N>-generator-summary.md`, `sprint-<N>-evaluator-feedback.md` (final iteration),
+      `sprint-<N>-gates.md` and `sprint-<N>-verdict.md` (the machine evidence), and
       `sprint-<N>-run-log.md` (written by the Monitor). Copy `spec.md` there on the first sprint
       close.
    3. Commit on the harness branch: `harness(<run-id>): sprint-<N> <contract title>`. The commit
@@ -126,48 +134,60 @@ HARNESS INCOMPLETE — missing: <paths>. No run started.
 
 ## 5. Routing logic
 
-### 5.1 Machine-readable markers
+### 5.1 Who decides what
 
-The Evaluator's feedback file **must** begin with this front matter. The orchestrator routes on
-this block only, never on prose.
+The verdict is **computed by code, not written by the LLM**. The Evaluator's only variable input
+is a PASS / FAIL / N/A answer, with evidence, for each of the 22 checklist items in
+`grading-criteria`. Everything else is done by `.harness/tools/HarnessGates.java`:
+- the 11 hard gates, from the build log and git;
+- the score and verdict (`grading-criteria` GC-3);
+- the next action (§5.3).
 
-```
----
-sprint: <N>
-iteration: <i>
-verdict: PASS | CONDITIONAL_PASS | FAIL
-hard_gates_failed: [<gate-id>, ...]   # empty list when none
-score: <0-100>
-gate_command_exit_code: <int>
----
-```
+Its `selftest` proves the same inputs always give the same output.
 
-### 5.2 Deterministic verdict guards (orchestrator-side)
+| Step | Command | Produces |
+|---|---|---|
+| Hard gates | `gates --sprint <N> --base <base-sha>` | `sprint-<N>-checks.log` (with `GATE_EXIT_CODE=`) and `sprint-<N>-gates.md` |
+| Verdict | `verdict --sprint <N> --iteration <i>` | `sprint-<N>-verdict.md`: front matter with `verdict`, `score` and `hard_gates_failed`, which the Evaluator copies verbatim into its feedback header |
+| Routing | `route --sprint <N> --iteration <i> [--evaluator-retried]` | `sprint-<N>-route.md`: `EFFECTIVE_VERDICT=`, `NEXT_ACTION=` (`ADVANCE`, `RETRY_GENERATOR`, `ESCALATE` or `REEVALUATE`), and `OVERRIDES=` |
 
-Before routing, the orchestrator applies these overrides itself. They are mechanical checks, not
-judgement calls. If any of them fires, the effective verdict is **FAIL** whatever the Evaluator
-wrote, and the reason is appended to the feedback file under `## Orchestrator overrides`.
+The orchestrator acts **only** on `NEXT_ACTION`. It never reads the prose of the feedback to decide.
+
+### 5.2 Deterministic guards (applied by `route`)
+
+`route` recomputes the verdict from `gates.md` plus the checklist rows in the feedback file. It
+then applies these guards. When a guard fires, the effective verdict is **FAIL** and the reason
+is appended to the feedback file under `## Orchestrator overrides`.
 
 | ID | Check | Why |
 |---|---|---|
-| O1 | `sprint-<N>-checks.log` is missing, or its recorded exit code ≠ 0, or it disagrees with `gate_command_exit_code` | An LLM must not "pass" a red build. |
-| O2 | `git diff --name-only <base-sha>` plus untracked files (`git ls-files --others --exclude-standard`) touches a **protected path**: `CLAUDE.md`, `.harness/agents/**`, `.harness/skills/**`, `config/**`, root `pom.xml`, `src/app/src/test/java/com/storeops/architecture/**` | The Generator must not weaken the gates it is judged by. |
-| O3 | Added lines in the sprint diff (`git diff HEAD` plus untracked files) contain `@SuppressWarnings`, `@SuppressFBWarnings`, `CHECKSTYLE:OFF`, `@Disabled`, or `<skip>true</skip>` | Same as O2: silencing a check is not fixing it. |
-| O4 | The front matter is missing or unparseable, or `verdict` is not one of the three values | Ambiguous output falls back to the safe verdict. |
-| O5 | `verdict` is PASS or CONDITIONAL_PASS but `hard_gates_failed` is non-empty | Internal contradiction falls back to the safe verdict. |
+| O1 | `sprint-<N>-gates.md` or `sprint-<N>-checks.log` is missing, or their exit codes disagree | An LLM must not "pass" a red or never-run build. |
+| O2 | Re-checked at routing time: `git diff --name-only <base-sha>` plus untracked files touches a **protected path**: `CLAUDE.md`, `.harness/agents/**`, `.harness/skills/**`, `.harness/tools/**`, `config/**`, root `pom.xml`, `src/app/src/test/java/com/storeops/architecture/**` | The Generator must not weaken the gates it is judged by. Re-checking catches edits made after evaluation. |
+| O3 | Re-checked at routing time: added lines under `src/` (`git diff HEAD` plus untracked files) contain `@SuppressWarnings`, `@SuppressFBWarnings`, `CHECKSTYLE:OFF`, `@Disabled`, or `<skip>true</skip>` | Same as O2: silencing a check is not fixing it. |
+| O4/O5 | The feedback header's `verdict` is missing, invalid, or differs from the computed verdict | The computed verdict wins. The mismatch is recorded so the Monitor can flag evaluator drift. |
 
-**Ambiguity rule.** For O4 only, re-spawn the Evaluator **once** on the same Generator output. This
-retry does not consume a Generator iteration. If the second output is still unparseable, the
-verdict is FAIL with reason `EVALUATOR_OUTPUT_AMBIGUOUS`.
+**Ambiguity rule.** The checklist may be missing or have no recognisable rows. On the first
+occurrence `route` returns `NEXT_ACTION=REEVALUATE`: re-spawn the Evaluator **once**, then call
+`route` again with `--evaluator-retried`. This retry does not consume a Generator iteration. If
+the checklist is still unparseable, the verdict is FAIL with reason `EVALUATOR_OUTPUT_AMBIGUOUS`.
 
-### 5.3 Routing table
+Partial ambiguity needs no retry because the tool already fails it per check (`grading-criteria`
+GC-5):
+- a missing row;
+- PASS without evidence;
+- N/A on a check that never allows N/A;
+- an unrecognised result;
+- conflicting duplicate rows.
 
-| Effective verdict | Condition | Next action |
+### 5.3 Routing table (implemented by `route`)
+
+| Effective verdict | Condition | `NEXT_ACTION` and what the orchestrator does |
 |---|---|---|
-| `PASS` | — | Close the sprint (§4.6) and advance to sprint N+1. |
-| `CONDITIONAL_PASS` | All hard gates passed, only non-blocking findings | Close the sprint. Copy its listed conditions into `run-state.md → carried_conditions`. The Planner-authored contract for N+1 is **not** edited. Conditions appear in the completion summary for the developer. |
-| `FAIL` | `i < 3` | Copy the feedback to `sprint-<N>-iter-<i>-evaluator-feedback.md` (kept for the Monitor). Increment `i`. Re-spawn the Generator with the contract plus the latest feedback file only. |
-| `FAIL` | `i = 3` | **Escalate** (§7). Stop the loop. |
+| `PASS` | — | `ADVANCE`: close the sprint (§4.6) and advance to sprint N+1. |
+| `CONDITIONAL_PASS` | All hard gates passed, only non-blocking findings | `ADVANCE`: close the sprint. Copy its listed conditions into `run-state.md → carried_conditions`. The Planner-authored contract for N+1 is **not** edited. Conditions appear in the completion summary for the developer. |
+| `FAIL` | `i < 3` | `RETRY_GENERATOR`: copy the feedback to `sprint-<N>-iter-<i>-evaluator-feedback.md` (kept for the Monitor). Increment `i`. Re-spawn the Generator with the contract plus the latest feedback file only. |
+| `FAIL` | `i = 3` | `ESCALATE`: write the escalation notice (§7) and stop the loop. |
+| — | Checklist unparseable, first time | `REEVALUATE`: re-spawn the Evaluator once (see the ambiguity rule). |
 
 ---
 
@@ -286,6 +306,9 @@ team observed (Section 2 of the brief).
   SpotBugs, the ArchUnit tests, the JaCoCo thresholds, and `-Werror`. The harness and CI therefore
   cannot drift apart. A rule added to the build is enforced in both places at once. Never add a
   gate only to the Evaluator prompt if it can be expressed in the build.
+- **The verdict logic is tested like code.** CI should also run
+  `java .harness/tools/HarnessGates.java selftest`. A change to `grading-criteria` that isn't
+  mirrored in the tool, or a tool change that alters a verdict, then fails the pipeline.
 - **Feeds CI with evidence.** The `.harness/reviews/<run-id>/` archive is committed with the code.
   The PR reviewer sees the contract, the self-check, the verdict and the run log next to the diff.
 - **Separation.** Harness files live in `.harness/`. CI configuration lives in `.github/` (or the
@@ -302,14 +325,17 @@ PROMPT.md                         feature prompt used for the demonstration run
 .harness/agents/                  planner | generator | evaluator | monitor .agent.md
 .harness/skills/<name>/SKILL.md   app-context, architecture-principles, sprint-decomposition,
                                   coding-conventions, how-to-test, how-to-review, grading-criteria
+.harness/tools/HarnessGates.java  deterministic gates / verdict / routing + selftest (protected)
 .harness/output/                  working files for the active run (gitignored):
                                   run-state.md, spec.md, sprint-N-contract.md,
                                   sprint-N-generator-summary.md, sprint-N-evaluator-feedback.md,
                                   sprint-N-iter-i-evaluator-feedback.md, sprint-N-checks.log,
+                                  sprint-N-gates.md, sprint-N-verdict.md, sprint-N-route.md,
                                   escalation.md
 .harness/reviews/<run-id>/        committed audit trail: spec.md, sprint-N-contract.md,
                                   sprint-N-generator-summary.md, sprint-N-evaluator-feedback.md,
-                                  sprint-N-run-log.md, run-summary.md
+                                  sprint-N-gates.md, sprint-N-verdict.md, sprint-N-run-log.md,
+                                  run-summary.md
 src/<module>/                     StoreOps source; tests in each module's src/test/java
 ```
 

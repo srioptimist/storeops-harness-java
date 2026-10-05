@@ -33,22 +33,23 @@ sharing blind spots.
 
 ## Procedure
 
-Run the steps in order. Steps 1–3 are mechanical and decide the hard gates. Step 4 is the
-judgement part, and its uncertainty is contained by the rules in step 5.
+Run the steps in order. Steps 1–3 are mechanical. Step 4 is the only judgement part, and its
+uncertainty is contained by step 5. **You never compute gates, scores or the verdict yourself:**
+`.harness/tools/HarnessGates.java` does that, so the same evidence always gives the same verdict.
 
-### 1. Run the gate command (fresh)
+### 1–2. Run the hard gates (fresh build + git checks)
 
 ```
-./mvnw -B clean test > .harness/output/sprint-<N>-checks.log 2>&1   (Windows: .\mvnw.cmd -B clean test)
+java .harness/tools/HarnessGates.java gates --sprint <N> --base <base-sha>
 ```
 
-Append `GATE_EXIT_CODE=<exit code>` as the **last line** of the log. The orchestrator
-cross-checks this value (guard O1).
+This runs `./mvnw -B clean test` into `sprint-<N>-checks.log` (ending in `GATE_EXIT_CODE=`). It
+evaluates all 11 hard gates and writes `sprint-<N>-gates.md`. Copy its gate table into your
+feedback as-is. Don't reinterpret a gate result. Use the gate evidence and `how-to-review` HR-3
+only to locate file:line details for your findings.
 
-### 2. Derive the hard gates from tool output
-
-Hard gates are decided only by these patterns. Do not reinterpret them. If the build stops
-early, gates in modules that never ran are `NOT_RUN`, which counts as failed.
+For reference, the tool applies the patterns below. If the build stops early, gates in modules
+that never ran are `NOT_RUN`, which counts as failed.
 
 | Gate id | Fails when the checks log contains | Rule / failure mode |
 |---|---|---|
@@ -60,7 +61,7 @@ early, gates in modules that never ran are `NOT_RUN`, which counts as failed.
 | `HG-TESTS` | Any other `Tests run: … Failures: x, Errors: y` line with x + y > 0 | Behaviour regression |
 | `HG-COVERAGE` | `Rule violated for` or `Coverage checks have not been met` | R3: thresholds |
 
-Then run these git-based gates. Sprint changes are
+Git-based gates, also computed by the tool. Sprint changes are
 `git diff --name-only HEAD` plus `git ls-files --others --exclude-standard`.
 
 | Gate id | Fails when | Rule |
@@ -89,7 +90,17 @@ must cite evidence, either a `file:line` or a log line. Review in this order, hi
 5. AC behaviour as written in GIVEN/WHEN/THEN.
 6. Conventions.
 
-### 5. Compute the verdict (deterministic)
+### 5. Compute the verdict (deterministic — by the tool)
+
+1. Write the feedback file with the **Checklist results** table filled in. That means one row per
+   check id A1…Q4, the result `PASS`, `FAIL` or `N/A`, and evidence in the last column. The tool
+   reads exactly these rows.
+2. Run `java .harness/tools/HarnessGates.java verdict --sprint <N> --iteration <i>`.
+3. Copy the front matter of the resulting `sprint-<N>-verdict.md` **verbatim** as the header of
+   your feedback file. Copy its dimension table into *Dimension scores*.
+4. Write *Verdict reasoning* to explain the computed result. Never argue with it.
+
+The rule the tool implements (`grading-criteria` GC-3):
 
 ```
 if any hard gate failed or NOT_RUN                    -> FAIL
@@ -105,13 +116,16 @@ else score = floor(Σ dimension weight × passed / applicable)   (N/A rules and 
 - The diff is too large to review within your budget.
 - You are unsure whether a behaviour meets the AC.
 
-Never round up. Never emit a verdict outside the three values. Never leave the front matter
-incomplete; the orchestrator treats an incomplete header as FAIL (guards O4/O5).
+The tool enforces this mechanically. A missing row, PASS without evidence, N/A on a check that
+never allows it, or an unrecognised result all count as FAIL. A header that disagrees with the
+computed verdict is overwritten at routing time (guards O4/O5), and the mismatch is logged as
+evaluator drift.
 
 ## Output contract — `.harness/output/sprint-<N>-evaluator-feedback.md`
 
-The front matter must be the first lines of the file, in exactly this shape. It is what the
-orchestrator routes on.
+The front matter must be the first lines of the file, copied from `sprint-<N>-verdict.md` plus
+`gate_command_exit_code` from `sprint-<N>-gates.md`. The orchestrator's `route` command
+recomputes and checks it.
 
 ```markdown
 ---
@@ -145,7 +159,7 @@ gate_command_exit_code: <int>
 | … (from grading-criteria) | | x / y | |
 | **Total** | 100% | | **<score>** |
 
-## Checklist results
+## Checklist results   (parsed by the gate tool: one row per A1…Q4; Result = PASS | FAIL | N/A; evidence last)
 | Check id | Result | Blocking | Evidence (file:line) |
 |---|---|---|---|
 

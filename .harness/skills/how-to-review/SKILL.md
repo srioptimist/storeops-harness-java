@@ -15,23 +15,27 @@ human. Read by the **Evaluator** only. *What* to check is in `grading-criteria`.
 3. Treat claims as **hypotheses to check**, never as evidence. The Generator's explanations
    aren't evidence either.
 
-## HR-2 Run the gate
+## HR-2 Run the gate (always through the tool)
 
 ```
-./mvnw -B clean test > .harness/output/sprint-<N>-checks.log 2>&1 ; echo "GATE_EXIT_CODE=$?" >> .harness/output/sprint-<N>-checks.log
+java .harness/tools/HarnessGates.java gates --sprint <N> --base <base-sha>
 ```
 
-On Windows PowerShell:
+The tool runs `./mvnw -B clean test` (`mvnw.cmd` on Windows) into
+`.harness/output/sprint-<N>-checks.log`, appends `GATE_EXIT_CODE=<n>`, and writes
+`sprint-<N>-gates.md`.
+- Its exit code is 0 only if all 11 gates PASS.
+- A build that runs longer than 15 minutes is killed (`GATE_EXIT_CODE=-1`).
+- Maven stops at the first failing module, so any module that isn't `SUCCESS` in the *Reactor
+  Summary* makes every unproven log gate `NOT_RUN`.
 
-```
-.\mvnw.cmd -B clean test *> .harness\output\sprint-<N>-checks.log; "GATE_EXIT_CODE=$LASTEXITCODE" | Add-Content .harness\output\sprint-<N>-checks.log
-```
+Don't run Maven by hand to "double-check" a gate. The tool's result is the result. To re-read an
+existing log without rebuilding, add `--skip-build`.
 
-- If the build hasn't finished within 10 minutes, kill it. All tool gates are then `NOT_RUN`.
-- Maven stops at the first failing module. In the *Reactor Summary*, modules marked `SKIPPED` had
-  their gates `NOT_RUN`.
+## HR-3 Log-parsing cookbook (where to find the file:line for a finding)
 
-## HR-3 Log-parsing cookbook (gate → pattern → where the file:line is)
+The tool already decides each gate. Use this table to locate the specific `file:line` (and the
+rule) to cite in your finding.
 
 | Gate | Look for | Extract the evidence from |
 |---|---|---|
@@ -42,7 +46,7 @@ On Windows PowerShell:
 | `HG-TESTS` | `Tests run: <a>, Failures: <x>, Errors: <y>` with x + y > 0 | `[ERROR]   <TestClass>.<method>:<line> <message>`. Full detail is in `src/<module>/target/surefire-reports/<TestClass>.txt` |
 | `HG-COVERAGE` | `Rule violated for (bundle\|package) <name>: lines covered ratio is <r>, but expected minimum is <m>` | Name the package, then the classes with the most `LINE_MISSED` in `src/<module>/target/site/jacoco/jacoco.csv` |
 
-## HR-4 Git-based gates (exact commands)
+## HR-4 Git-based gates (what the tool runs; use these to inspect a failure)
 
 ```
 git diff --name-only HEAD                       # tracked changes in this sprint
@@ -52,8 +56,10 @@ git diff HEAD -U0 | grep '^+'                   # added lines, for HG-SUPPRESS (
 grep -rhoE '@DisplayName\("AC-[0-9]+\.[0-9]+' src/*/src/test   # for HG-AC-TRACE
 ```
 
-- **HG-PROTECTED** matches: `^CLAUDE\.md$`, `^\.harness/(agents|skills)/`, `^config/`,
+- **HG-PROTECTED** matches: `^CLAUDE\.md$`, `^\.harness/(agents|skills|tools)/`, `^config/`,
   `^pom\.xml$`, `^src/app/src/test/java/com/storeops/architecture/`.
+- **HG-SUPPRESS** scans only added lines under `src/`, because documentation may legitimately
+  mention these annotations.
 - **HG-SCOPE** compares every changed path against the contract's *Allowed paths* globs.
   `.harness/output/**` is ignored, since the agents write there.
 
