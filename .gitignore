@@ -9,3 +9,6 @@ target/
 .settings/
 .DS_Store
 !.mvn/wrapper/maven-wrapper.jar
+
+# Harness working files for the active run (the audit trail in .harness/reviews/ IS committed)
+.harness/output/
